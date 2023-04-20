@@ -1,6 +1,6 @@
 ARG COMMIT_SHA=""
 
-FROM --platform=$BUILDPLATFORM node:alpine AS builder
+FROM node:alpine AS builder
 WORKDIR /app
 
 RUN npm i -g pnpm
