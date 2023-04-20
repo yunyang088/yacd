@@ -144,7 +144,8 @@ function renderTableOrPlaceholder(conns: FormattedConn[]) {
 }
 
 function connQty({ qty }) {
-  return qty < 100 ? '' + qty : '99+';
+  // return qty < 100 ? '' + qty : '99+';
+  return qty;
 }
 
 function Conn({ apiConfig }) {
@@ -187,7 +188,7 @@ function Conn({ apiConfig }) {
       }
       setClosedConns((prev) => {
         // keep max 100 entries
-        return [...closed, ...prev].slice(0, 101);
+        return [...closed, ...prev].slice(0, 98);
       });
       // if previous connections and current connections are both empty
       // arrays, we wont update state to avoid rerender
