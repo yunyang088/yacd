@@ -91,7 +91,11 @@ function filterConns(conns: FormattedConn[], keyword: string, sourceIp: string) 
 }
 
 function getConnIpList(conns: FormattedConn[]) {
-  return Array.from(new Set(conns.map((x) => x.sourceIP))).sort();
+  return Array.from(new Set(conns.map((x) => x.sourceIP))).sort((a: string, b: string) => {
+    const lastSegmentA = parseInt(a.split('.').pop() || '', 10);
+    const lastSegmentB = parseInt(b.split('.').pop() || '', 10);
+    return lastSegmentA - lastSegmentB;
+  });
 }
 
 function formatConnectionDataItem(
