@@ -37,15 +37,15 @@ export default function Home() {
       <ContentHeader title={t('Overview')} />
       <div className={s0.root}>
         <div>
-          <ClashVersion />
-        </div>
-        <div>
           <TrafficNow />
         </div>
         <div className={s0.chart}>
           <Suspense fallback={<Loading height="200px" />}>
             <TrafficChart />
           </Suspense>
+        </div>
+        <div>
+          <ClashVersion />
         </div>
       </div>
     </div>
