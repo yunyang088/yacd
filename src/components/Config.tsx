@@ -23,10 +23,10 @@ const { useEffect, useState, useCallback, useRef, useMemo } = React;
 
 const propsList = [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }];
 
-const logLeveOptions = [
+const logLevelOptions = [
   ['debug', 'Debug'],
   ['info', 'Info'],
-  ['warning', 'Warning'],
+  ['warn', 'Warn'],
   ['error', 'Error'],
   ['silent', 'Silent'],
 ];
@@ -212,7 +212,7 @@ function ConfigImpl({
         <div>
           <div className={s0.label}>Log Level</div>
           <Select
-            options={logLeveOptions}
+            options={logLevelOptions}
             selected={configState['log-level']}
             onChange={(e) => handleChangeValue({ name: 'log-level', value: e.target.value })}
           />

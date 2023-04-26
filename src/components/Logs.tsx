@@ -23,7 +23,7 @@ const paddingBottom = 30;
 const colors = {
   debug: '#28792c',
   info: 'var(--bg-log-info-tag)',
-  warning: '#b99105',
+  warn: '#b99105',
   error: '#c11c1c',
 };
 
