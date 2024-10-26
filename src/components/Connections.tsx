@@ -4,20 +4,22 @@ import React from 'react';
 import { Pause, Play, X as IconClose } from 'react-feather';
 import { useTranslation } from 'react-i18next';
 import { Tab, TabList, TabPanel, Tabs } from 'react-tabs';
+import { List } from 'reselect/es/types';
 import { ConnectionItem } from 'src/api/connections';
-import { State } from 'src/store/types';
+import BaseModal from 'src/components/shared/BaseModal';
+
+import { useApiConfig } from '$src/store/app';
 
 import * as connAPI from '../api/connections';
 import useRemainingViewPortHeight from '../hooks/useRemainingViewPortHeight';
-import { getClashAPIConfig } from '../store/app';
 import Button from './Button';
 import s from './Connections.module.scss';
 import ConnectionTable from './ConnectionTable';
 import { MutableConnRefCtx } from './conns/ConnCtx';
-import ContentHeader from './ContentHeader';
+import { ContentHeader } from './ContentHeader';
 import ModalCloseAllConnections from './ModalCloseAllConnections';
 import { Action, Fab, position as fabPosition } from './shared/Fab';
-import { connect } from './StateProvider';
+import SourceIP from './SourceIP';
 import SvgYacd from './SvgYacd';
 
 const { useEffect, useState, useRef, useCallback } = React;
@@ -58,10 +60,26 @@ type FormattedConn = {
 };
 
 function hasSubstring(s: string, pat: string) {
-  return s.toLowerCase().includes(pat.toLowerCase());
+  return (s ?? '').toLowerCase().includes(pat.toLowerCase());
 }
 function filterConnIps(conns: FormattedConn[], ipStr: string) {
   return conns.filter((each) => each.sourceIP === ipStr);
+}
+
+function getConnIpList(conns: FormattedConn[]): List<string> {
+  //ip 按数字排序
+  return Array.from(new Set(conns.map((x) => x.sourceIP))).sort((a, b) => {
+    const aArr = a.split('.').map((x) => parseInt(x));
+    const bArr = b.split('.').map((x) => parseInt(x));
+    for (let i = 0; i < 4; i++) {
+      if (aArr[i] < bArr[i]) {
+        return -1;
+      } else if (aArr[i] > bArr[i]) {
+        return 1;
+      }
+    }
+    return 0;
+  })
 }
 
 function filterConns(conns: FormattedConn[], keyword: string, sourceIp: string) {
@@ -80,7 +98,7 @@ function filterConns(conns: FormattedConn[], keyword: string, sourceIp: string) 
         conn.processPath,
       ].some((field) => {
         return hasSubstring(field, keyword);
-      })
+      }),
     );
   }
   if (sourceIp !== '') {
@@ -90,19 +108,11 @@ function filterConns(conns: FormattedConn[], keyword: string, sourceIp: string) 
   return result;
 }
 
-function getConnIpList(conns: FormattedConn[]) {
-  return Array.from(new Set(conns.map((x) => x.sourceIP))).sort((a: string, b: string) => {
-    const lastSegmentA = parseInt(a.split('.').pop() || '', 10);
-    const lastSegmentB = parseInt(b.split('.').pop() || '', 10);
-    return lastSegmentA - lastSegmentB;
-  });
-}
-
-function formatConnectionDataItem(
+function fmtConnItem(
   i: ConnectionItem,
   prevKv: Record<string, { upload: number; download: number }>,
   now: number,
-  mutConnCtxRef: { hasProcessPath: boolean }
+  mutConnCtxRef: { hasProcessPath: boolean },
 ): FormattedConn {
   const { id, metadata, upload, download, start, chains, rule, rulePayload } = i;
   const { host, destinationPort, destinationIP, network, type, sourceIP, sourcePort } = metadata;
@@ -110,10 +120,8 @@ function formatConnectionDataItem(
   if (mutConnCtxRef.hasProcessPath === false && typeof processPath !== 'undefined') {
     mutConnCtxRef.hasProcessPath = true;
   }
-
   // host could be an empty string if it's direct IP connection
-  let host2 = host;
-  if (host2 === '') host2 = destinationIP;
+  const host2 = host || destinationIP || '';
   const prev = prevKv[id];
   const ret = {
     id,
@@ -145,11 +153,14 @@ function renderTableOrPlaceholder(conns: FormattedConn[]) {
 
 function connQty({ qty }) {
   // return qty < 100 ? '' + qty : '99+';
-  return qty;
+  return '' + qty;
 }
 
-function Conn({ apiConfig }) {
+export default function Conn() {
+  const apiConfig = useApiConfig();
   const [refContainer, containerHeight] = useRemainingViewPortHeight();
+
+  const [isExtraModalOpen, setIsExtraModalOpen] = useState(false);
 
   const [conns, setConns] = useState([]);
   const [closedConns, setClosedConns] = useState([]);
@@ -161,9 +172,15 @@ function Conn({ apiConfig }) {
   const filteredClosedConns = filterConns(closedConns, filterKeyword, filterSourceIpStr);
 
   const connIpSet = getConnIpList(conns);
-  const ClosedConnIpSet = getConnIpList(closedConns);
 
   const [isCloseAllModalOpen, setIsCloseAllModalOpen] = useState(false);
+  const openExtraModal = useCallback(() => {
+    setIsExtraModalOpen(true);
+  }, []);
+  const closeExtraModal = useCallback(() => {
+    setIsExtraModalOpen(false);
+  }, []);
+
   const openCloseAllModal = useCallback(() => setIsCloseAllModalOpen(true), []);
   const closeCloseAllModal = useCallback(() => setIsCloseAllModalOpen(false), []);
   const [isRefreshPaused, setIsRefreshPaused] = useState(false);
@@ -175,20 +192,18 @@ function Conn({ apiConfig }) {
   const prevConnsRef = useRef(conns);
   const connCtx = React.useContext(MutableConnRefCtx);
   const read = useCallback(
-    ({ connections }) => {
+    ({ connections }: { connections: ConnectionItem[] }) => {
       const prevConnsKv = arrayToIdKv(prevConnsRef.current);
       const now = Date.now();
-      const x = connections.map((c: ConnectionItem) =>
-        formatConnectionDataItem(c, prevConnsKv, now, connCtx)
-      );
+      const x = connections.map((c) => fmtConnItem(c, prevConnsKv, now, connCtx));
       const closed = [];
       for (const c of prevConnsRef.current) {
-        const idx = x.findIndex((conn: ConnectionItem) => conn.id === c.id);
+        const idx = x.findIndex((conn) => conn.id === c.id);
         if (idx < 0) closed.push(c);
       }
       setClosedConns((prev) => {
         // keep max 100 entries
-        return [...closed, ...prev].slice(0, 98);
+        return [...closed, ...prev].slice(0, 101);
       });
       // if previous connections and current connections are both empty
       // arrays, we wont update state to avoid rerender
@@ -199,9 +214,8 @@ function Conn({ apiConfig }) {
         prevConnsRef.current = x;
       }
     },
-    [isRefreshPaused, connCtx]
+    [setConns, isRefreshPaused, connCtx],
   );
-
   useEffect(() => {
     return connAPI.fetchData(apiConfig, read);
   }, [apiConfig, read]);
@@ -210,7 +224,12 @@ function Conn({ apiConfig }) {
 
   return (
     <div>
-      <ContentHeader title={t('Connections')} />
+      <ContentHeader title={`${t('Connections')} : ${filterSourceIpStr}`} />
+      <BaseModal isOpen={isExtraModalOpen} onRequestClose={closeExtraModal}>
+        <span>{t('pleaseSelectSourceIP')}</span>
+        <hr />
+        <SourceIP connIPset={connIpSet} setFilterIpStr={setFilterSourceIpStr} />
+      </BaseModal>
       <Tabs>
         <div
           style={{
@@ -229,15 +248,18 @@ function Conn({ apiConfig }) {
               <span className={s.connQty}>{connQty({ qty: filteredClosedConns.length })}</span>
             </Tab>
           </TabList>
-          <div className={s.inputWrapper}>
+          <div className={s.filterWrapper}>
             <input
               type="text"
               name="filter"
               autoComplete="off"
               className={s.input}
-              placeholder="Filter"
+              placeholder="Filter By Keyword"
               onChange={(e) => setFilterKeyword(e.target.value)}
             />
+            <Button className={s.button} onClick={openExtraModal}>
+              {t('filterByIP')}
+            </Button>
           </div>
         </div>
         <div ref={refContainer} style={{ padding: 30, paddingBottom, paddingTop: 0 }}>
@@ -248,16 +270,7 @@ function Conn({ apiConfig }) {
             }}
           >
             <TabPanel>
-              <Button onClick={() => setFilterSourceIpStr('')} kind="minimal">
-                {t('All')}
-              </Button>
-              {connIpSet.map((value, k) => {
-                return (
-                  <Button key={k} onClick={() => setFilterSourceIpStr(value)} kind="minimal">
-                    {value}
-                  </Button>
-                );
-              })}
+              <SourceIP connIPset={connIpSet} setFilterIpStr={setFilterSourceIpStr} />
               {renderTableOrPlaceholder(filteredConns)}
               <Fab
                 icon={isRefreshPaused ? <Play size={16} /> : <Pause size={16} />}
@@ -272,16 +285,7 @@ function Conn({ apiConfig }) {
               </Fab>
             </TabPanel>
             <TabPanel>
-              <Button onClick={() => setFilterSourceIpStr('')} kind="minimal">
-                {t('All')}
-              </Button>
-              {ClosedConnIpSet.map((value, k) => {
-                return (
-                  <Button key={k} onClick={() => setFilterSourceIpStr(value)} kind="minimal">
-                    {value}
-                  </Button>
-                );
-              })}
+              {/* <SourceIP connIPset={ClosedConnIpSet} setFilterIpStr={setFilterSourceIpStr} /> */}
               {renderTableOrPlaceholder(filteredClosedConns)}
             </TabPanel>
           </div>
@@ -295,9 +299,3 @@ function Conn({ apiConfig }) {
     </div>
   );
 }
-
-const mapState = (s: State) => ({
-  apiConfig: getClashAPIConfig(s),
-});
-
-export default connect(mapState)(Conn);
